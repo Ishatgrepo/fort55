@@ -8,12 +8,7 @@ from translation import Translation
 from pyrogram import Client, filters, enums, __version__ as pyrogram_version
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup, InputMediaDocument
 
-main_buttons = [[
-        InlineKeyboardButton('Main Channel', url='https://t.me/vrindavanneeko16008')
-        ],[
-        InlineKeyboardButton('📜 sᴜᴘᴘᴏʀᴛ ɢʀᴏᴜᴘ ', url='https://t.me/vrindavannagri16008'),
-        InlineKeyboardButton('🤖 ᴜᴘᴅᴀᴛᴇ ᴄʜᴀɴɴᴇʟ  ', url='https://t.me/aboutpragyanpandey')
-        ],[
+main_buttons = [[ 
         InlineKeyboardButton('🙋‍♂️ ʜᴇʟᴘ', callback_data='help'),
         InlineKeyboardButton('💁‍♂️ ᴀʙᴏᴜᴛ ', callback_data='about')
         ],[
