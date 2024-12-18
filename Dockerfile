@@ -2,7 +2,7 @@
 FROM python:3.10.4-slim-buster
 
 # Update package list and install required dependencies
-RUN apt-get update && apt-get upgrade -y \
+RUN apt-get update -y \
     && apt-get install -y git curl wget bash neofetch ffmpeg software-properties-common \
     && apt-get clean
 
