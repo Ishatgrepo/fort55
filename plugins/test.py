@@ -91,8 +91,6 @@ class CLIENT:
         return await msg.reply('<b>process cancelled !</b>')
      elif not msg.forward_date:
        return await msg.reply_text("<b>This is not a forward message</b>")
-     elif str(msg.forward_from.id) != "93372553":
-       return await msg.reply_text("<b>This message was not forward from bot father</b>")
      bot_token = re.findall(r'\d[0-9]{8,10}:[0-9A-Za-z_-]{35}', msg.text, re.IGNORECASE)
      bot_token = bot_token[0] if bot_token else None
      if not bot_token:
