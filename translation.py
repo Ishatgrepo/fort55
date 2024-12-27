@@ -39,10 +39,9 @@ class Translation(object):
   
   ABOUT_TXT = """<b>╭──────❰ 🤖 Bot Details ❱──────〄
 │ 
-│ 🤖 Mʏ Nᴀᴍᴇ : <a href=https://t.me/aboutpragyanpandey>Pragyan Bot </a>
-│ 👨‍💻 ᴅᴇᴠᴘʟᴏᴇʀ : <a href=https://t.me/aboutpragyanpandey>Pragyan</a>
-│ 🤖 ᴜᴘᴅᴀᴛᴇ  : <a href=https://t.me/vrindavanneeko16008>Pragyan</a>
-│ 📡 ʜᴏsᴛ ᴏɴ : <a href=https://t.me/vrindavannagri16008/>Pragyan Server</a>
+│ 🤖 Mʏ Nᴀᴍᴇ : <a href=https://t.me/h_oneysingh>Honey Bot </a>
+│ 👨‍💻 ᴅᴇᴠᴘʟᴏᴇʀ : <a href=https://t.me/h_oneysingh>Honey</a>
+│ 🤖 ᴜᴘᴅᴀᴛᴇ  : <a href=https://t.me/h_oneysingh>Honey</a>
 │ 🗣️ ʟᴀɴɢᴜᴀɢᴇ  : ᴘʏᴛʜᴏɴ 3 
 {python_version}
 │ 📚 ʟɪʙʀᴀʀʏ  : ᴘʏʀᴏɢʀᴀᴍ  
