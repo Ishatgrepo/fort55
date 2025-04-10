@@ -43,7 +43,10 @@ class FwdBot(Client):
 
 async def start_clone_bot(client: Client, data=None):
     try:
+        if client is None:
+            raise ValueError("Client object is None")
         await client.start()
+        logger.info("Client started successfully")
         return client
     except Exception as e:
         logger.error(f"Failed to start client: {e}")
@@ -53,31 +56,45 @@ class CLIENT:
     def __init__(self):
         self.api_id = Config.API_ID
         self.api_hash = Config.API_HASH
+        # Validate API credentials at initialization
+        if not self.api_id or not self.api_hash:
+            logger.error("API_ID or API_HASH is missing in Config")
+            raise ValueError("API_ID and API_HASH must be set in config.py")
 
     def client(self, data, user=None):
-        if user is None and data.get('is_bot') is False:
-            return FwdBot(
-                "USERBOT",
-                api_id=self.api_id,
-                api_hash=self.api_hash,
-                session_string=data.get('session')
-            )
-        elif user is True:
-            return FwdBot(
-                "USERBOT",
-                api_id=self.api_id,
-                api_hash=self.api_hash,
-                session_string=data
-            )
-        elif user is not False:
-            data = data.get('token') if isinstance(data, dict) else data
-            return FwdBot(
-                "BOT",
-                api_id=self.api_id,
-                api_hash=self.api_hash,
-                bot_token=data,
-                in_memory=True
-            )
+        try:
+            if user is None and data.get('is_bot') is False:
+                logger.info("Creating USERBOT client with session string")
+                return FwdBot(
+                    "USERBOT",
+                    api_id=self.api_id,
+                    api_hash=self.api_hash,
+                    session_string=data.get('session')
+                )
+            elif user is True:
+                logger.info("Creating USERBOT client with session string (direct)")
+                return FwdBot(
+                    "USERBOT",
+                    api_id=self.api_id,
+                    api_hash=self.api_hash,
+                    session_string=data
+                )
+            elif user is not False:
+                token = data.get('token') if isinstance(data, dict) else data
+                if not token:
+                    logger.error("Bot token is missing or invalid")
+                    return None
+                logger.info(f"Creating BOT client with token: {token[:10]}...")
+                return FwdBot(
+                    "BOT",
+                    api_id=self.api_id,
+                    api_hash=self.api_hash,
+                    bot_token=token,
+                    in_memory=True
+                )
+        except Exception as e:
+            logger.error(f"Failed to create client: {e}")
+            return None
 
     async def add_bot(self, bot, message):
         user_id = int(message.from_user.id)
@@ -97,10 +114,16 @@ class CLIENT:
         try:
             client_instance = self.client(bot_token, False)
             if client_instance is None:
+                logger.error("Client instance is None after creation")
                 return await msg.reply_text("<b>Failed to initialize bot client</b>")
+            logger.info(f"Attempting to start bot with token: {bot_token[:10]}...")
             _client = await start_clone_bot(client_instance)
         except (AccessTokenInvalid, AccessTokenExpired) as e:
+            logger.error(f"Invalid or expired bot token: {e}")
             return await msg.reply_text(f"<b>Invalid or expired bot token:</b> `{e}`")
+        except ValueError as e:
+            logger.error(f"ValueError during bot initialization: {e}")
+            return await msg.reply_text(f"<b>Failed to initialize bot client:</b> `{e}`")
         except Exception as e:
             logger.error(f"Bot creation error: {e}")
             return await msg.reply_text(f"<b>BOT ERROR:</b> `{e}`")
@@ -108,8 +131,10 @@ class CLIENT:
         # Get bot details
         try:
             _bot = await _client.get_me()
+            logger.info(f"Bot details retrieved: {_bot.id} (@{_bot.username})")
         except Exception as e:
             await _client.stop()
+            logger.error(f"Failed to get bot details: {e}")
             return await msg.reply_text(f"<b>Failed to get bot details:</b> `{e}`")
 
         # Store bot details in database
@@ -122,7 +147,8 @@ class CLIENT:
             'username': _bot.username
         }
         await db.add_bot(details)
-        await _client.stop()  # Stop the client after adding to avoid keeping it running
+        await _client.stop()
+        logger.info(f"Bot {_bot.id} added successfully for user {user_id}")
         return True
 
     async def add_session(self, bot, message):
@@ -139,6 +165,7 @@ class CLIENT:
             client = await start_clone_bot(self.client(msg.text, True))
             user = await client.get_me()
         except Exception as e:
+            logger.error(f"User bot creation error: {e}")
             return await msg.reply_text(f"<b>USER BOT ERROR:</b> `{e}`")
 
         details = {
@@ -151,6 +178,7 @@ class CLIENT:
         }
         await db.add_bot(details)
         await client.stop()
+        logger.info(f"Userbot {user.id} added successfully for user {user_id}")
         return True
 
 @Client.on_message(filters.private & filters.command('reset'))
