@@ -21,26 +21,36 @@ BOT_TOKEN_TEXT = "<b>1) Create a bot using @BotFather\n2) Then you will get a me
 SESSION_STRING_SIZE = 351
 
 async def start_clone_bot(FwdBot, data=None):
-    await FwdBot.start()
-    async def iter_messages(
-        self, 
-        chat_id: typing.Union[int, str], 
-        limit: int, 
-        offset: int = 0,
-        search: str = None,
-        filter: "types.TypeMessagesFilter" = None,
-    ) -> typing.Optional[typing.AsyncGenerator["types.Message", None]]:
-        current = offset
-        while True:
-            new_diff = min(200, limit - current)
-            if new_diff <= 0:
-                return
-            messages = await self.get_messages(chat_id, list(range(current, current + new_diff + 1)))
-            for message in messages:
-                yield message
-                current += 1
-    FwdBot.iter_messages = iter_messages
-    return FwdBot
+    """Start a Pyrogram Client and attach custom iter_messages method."""
+    try:
+        await FwdBot.start()
+        me = await FwdBot.get_me()
+        logger.info(f"Started client: @{me.username or me.id} (ID: {me.id})")
+        
+        async def iter_messages(
+            self,
+            chat_id: Union[int, str],
+            limit: int,
+            offset: int = 0,
+            search: str = None,
+            filter: "types.TypeMessagesFilter" = None,
+        ) -> Optional[AsyncGenerator["types.Message", None]]:
+            """Iterate through a chat sequentially."""
+            current = offset
+            while True:
+                new_diff = min(200, limit - current)
+                if new_diff <= 0:
+                    return
+                messages = await self.get_messages(chat_id, list(range(current, current + new_diff + 1)))
+                for message in messages:
+                    yield message
+                    current += 1
+        
+        FwdBot.iter_messages = iter_messages
+        return FwdBot
+    except Exception as e:
+        logger.error(f"Error starting client: {e}")
+        raise
 
 class CLIENT: 
     def __init__(self):
