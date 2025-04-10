@@ -129,13 +129,13 @@ async def forward_tag(bot, m):
     default = await db.get_configs("01")
     temp.CONFIGS[m.from_user.id] = default
     await db.update_configs(m.from_user.id, default)
-    await m.reply("Successfully settings reset ✔️")
+    await m.reply("Successfully reset settings ✔️")
 
 @Client.on_message(filters.command('resetall') & filters.user(Config.BOT_OWNER_ID))
 async def resetall(bot, message):
     users = await db.get_all_users()
     sts = await message.reply("**Processing**")
-    TEXT = "Total: {}\nSuccess: {}\nFailed: {}\nExcept: {}"
+    TEXT = "total: {}\nsuccess: {}\nfailed: {}\nexcept: {}"
     total = success = failed = already = 0
     ERRORS = []
     async for user in users:
@@ -152,7 +152,7 @@ async def resetall(bot, message):
             ERRORS.append(e)
             failed += 1
     if ERRORS:
-        await message.reply(str(ERRORS[:100]))
+        await message.reply(ERRORS[:100])
     await sts.edit("Completed\n" + TEXT.format(total, success, failed, already))
 
 async def get_configs(user_id):
