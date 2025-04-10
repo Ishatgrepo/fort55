@@ -13,6 +13,8 @@ from pyrogram.errors.exceptions.bad_request_400 import AccessTokenExpired, Acces
 from pyrogram.errors import FloodWait
 from translation import Translation
 
+from typing import Union, Optional, AsyncGenerator
+
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
