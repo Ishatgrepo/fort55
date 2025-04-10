@@ -97,36 +97,59 @@ class CLIENT:
             return None
 
     async def add_bot(self, bot, message):
-        """Add a bot by parsing a forwarded token from @BotFather."""
         user_id = int(message.from_user.id)
         msg = await bot.ask(chat_id=user_id, text=BOT_TOKEN_TEXT)
         if msg.text == '/cancel':
             return await msg.reply('<b>Process cancelled!</b>')
         elif not msg.forward_date:
             return await msg.reply_text("<b>This is not a forwarded message</b>")
-        
+
+        # Extract bot token from message
         bot_token = re.findall(r'\d[0-9]{8,10}:[0-9A-Za-z_-]{35}', msg.text, re.IGNORECASE)
         bot_token = bot_token[0] if bot_token else None
         if not bot_token:
-            return await msg.reply_text("<b>There is no bot token in that message</b>")
-        
+            return await msg.reply_text("<b>No valid bot token found in the message</b>")
+
+        # Create and start the bot client
         try:
-            _client = await start_clone_bot(self.client({'token': bot_token}, False))
-            _bot = await _client.get_me()
-            details = {
-                'id': _bot.id,
-                'is_bot': True,
-                'user_id': user_id,
-                'name': _bot.first_name,
-                'token': bot_token,
-                'username': _bot.username
-            }
-            await db.add_bot(details)
-            await msg.reply_text(f"<b>Bot added successfully: @{_bot.username}</b>")
-            return True
+            client_instance = self.client(bot_token, False)
+            if client_instance is None:
+                logger.error("Client instance is None after creation")
+                return await msg.reply_text("<b>Failed to initialize bot client</b>")
+            logger.info(f"Attempting to start bot with token: {bot_token[:10]}...")
+            _client = await start_clone_bot(client_instance)
+        except (AccessTokenInvalid, AccessTokenExpired) as e:
+            logger.error(f"Invalid or expired bot token: {e}")
+            return await msg.reply_text(f"<b>Invalid or expired bot token:</b> `{e}`")
+        except ValueError as e:
+            logger.error(f"ValueError during bot initialization: {e}")
+            return await msg.reply_text(f"<b>Failed to initialize bot client:</b> `{e}`")
         except Exception as e:
-            await msg.reply_text(f"<b>BOT ERROR:</b> `{e}`")
-            return False
+            logger.error(f"Bot creation error: {e}")
+            return await msg.reply_text(f"<b>BOT ERROR:</b> `{e}`")
+
+        # Get bot details
+        try:
+            _bot = await _client.get_me()
+            logger.info(f"Bot details retrieved: {_bot.id} (@{_bot.username})")
+        except Exception as e:
+            await _client.stop()
+            logger.error(f"Failed to get bot details: {e}")
+            return await msg.reply_text(f"<b>Failed to get bot details:</b> `{e}`")
+
+        # Store bot details in database
+        details = {
+            'id': _bot.id,
+            'is_bot': True,
+            'user_id': user_id,
+            'name': _bot.first_name,
+            'token': bot_token,
+            'username': _bot.username
+        }
+        await db.add_bot(details)
+        await _client.stop()
+        logger.info(f"Bot {_bot.id} added successfully for user {user_id}")
+        return True
 
     async def add_session(self, bot, message):
         user_id = int(message.from_user.id)
