@@ -22,177 +22,156 @@ BTN_URL_REGEX = re.compile(r"(\[([^\[]+?)]\[buttonurl:/{0,2}(.+?)(:same)?])")
 BOT_TOKEN_TEXT = "<b>1) Create a bot using @BotFather\n2) Then you will get a message with bot token\n3) Forward that message to me</b>"
 SESSION_STRING_SIZE = 351
 
-class FwdBot(Client):
-    async def iter_messages(
-        self,
-        chat_id: Union[int, str],
-        limit: int,
-        offset: int = 0,
-        search: str = None,
-        filter: "types.TypeMessagesFilter" = None,
-    ) -> Optional[AsyncGenerator["types.Message", None]]:
-        current = offset
-        while True:
-            new_diff = min(200, limit - current)
-            if new_diff <= 0:
-                return
-            messages = await self.get_messages(chat_id, list(range(current, current + new_diff + 1)))
-            for message in messages:
-                yield message
-                current += 1
-
-async def start_clone_bot(client: Client, data=None):
+async def start_clone_bot(FwdBot, data=None):
+    """Start a Pyrogram Client and attach custom iter_messages method."""
     try:
-        if client is None:
-            raise ValueError("Client object is None")
-        await client.start()
-        logger.info("Client started successfully")
-        return client
+        await FwdBot.start()
+        me = await FwdBot.get_me()
+        logger.info(f"Started client: @{me.username or me.id} (ID: {me.id})")
+        
+        async def iter_messages(
+            self,
+            chat_id: Union[int, str],
+            limit: int,
+            offset: int = 0,
+            search: str = None,
+            filter: "types.TypeMessagesFilter" = None,
+        ) -> Optional[AsyncGenerator["types.Message", None]]:
+            """Iterate through a chat sequentially."""
+            current = offset
+            while True:
+                new_diff = min(200, limit - current)
+                if new_diff <= 0:
+                    return
+                messages = await self.get_messages(chat_id, list(range(current, current + new_diff + 1)))
+                for message in messages:
+                    yield message
+                    current += 1
+        
+        FwdBot.iter_messages = iter_messages
+        return FwdBot
     except Exception as e:
-        logger.error(f"Failed to start client: {e}")
+        logger.error(f"Error starting client: {e}")
         raise
 
 class CLIENT:
     def __init__(self):
         self.api_id = Config.API_ID
         self.api_hash = Config.API_HASH
-        # Validate API credentials at initialization
-        if not self.api_id or not self.api_hash:
-            logger.error("API_ID or API_HASH is missing in Config")
-            raise ValueError("API_ID and API_HASH must be set in config.py")
 
     def client(self, data, user=None):
+        """Initialize a Pyrogram Client with a unique name for a bot or userbot."""
         try:
             if user is None and data.get('is_bot') is False:
-                logger.info("Creating USERBOT client with session string")
-                return FwdBot(
-                    "USERBOT",
+                # Userbot from database (forwarding task)
+                client_name = f"userbot_{data['id']}"
+                logger.info(f"Initializing userbot: {client_name}")
+                return Client(
+                    name=client_name,
                     api_id=self.api_id,
                     api_hash=self.api_hash,
                     session_string=data.get('session')
                 )
             elif user is True:
-                logger.info("Creating USERBOT client with session string (direct)")
-                return FwdBot(
-                    "USERBOT",
+                # Userbot from user input (adding session)
+                client_name = f"userbot_{hash(data) % 1000000}"  # Unique hash-based name
+                logger.info(f"Initializing userbot: {client_name}")
+                return Client(
+                    name=client_name,
                     api_id=self.api_id,
                     api_hash=self.api_hash,
                     session_string=data
                 )
-            elif user is not False:
-                token = data.get('token') if isinstance(data, dict) else data
-                if not token:
-                    logger.error("Bot token is missing or invalid")
-                    return None
-                logger.info(f"Creating BOT client with token: {token[:10]}...")
-                return FwdBot(
-                    "BOT",
+            else:
+                # Bot with token (from database or adding bot)
+                bot_id = data.get('id', 'temp')  # Use 'temp' if ID not yet available
+                client_name = f"bot_{bot_id}"
+                logger.info(f"Initializing bot: {client_name}")
+                return Client(
+                    name=client_name,
                     api_id=self.api_id,
                     api_hash=self.api_hash,
-                    bot_token=token,
+                    bot_token=data.get('token'),
                     in_memory=True
                 )
         except Exception as e:
-            logger.error(f"Failed to create client: {e}")
-            return None
+            logger.error(f"Failed to initialize client: {e}")
+            raise
 
     async def add_bot(self, bot, message):
+        """Add a bot by parsing a forwarded token from @BotFather."""
         user_id = int(message.from_user.id)
         msg = await bot.ask(chat_id=user_id, text=BOT_TOKEN_TEXT)
         if msg.text == '/cancel':
             return await msg.reply('<b>Process cancelled!</b>')
         elif not msg.forward_date:
             return await msg.reply_text("<b>This is not a forwarded message</b>")
-
-        # Extract bot token from message
+        
         bot_token = re.findall(r'\d[0-9]{8,10}:[0-9A-Za-z_-]{35}', msg.text, re.IGNORECASE)
         bot_token = bot_token[0] if bot_token else None
         if not bot_token:
-            return await msg.reply_text("<b>No valid bot token found in the message</b>")
-
-        # Create and start the bot client
+            return await msg.reply_text("<b>There is no bot token in that message</b>")
+        
         try:
-            client_instance = self.client(bot_token, False)
-            if client_instance is None:
-                logger.error("Client instance is None after creation")
-                return await msg.reply_text("<b>Failed to initialize bot client</b>")
-            logger.info(f"Attempting to start bot with token: {bot_token[:10]}...")
-            _client = await start_clone_bot(client_instance)
-        except (AccessTokenInvalid, AccessTokenExpired) as e:
-            logger.error(f"Invalid or expired bot token: {e}")
-            return await msg.reply_text(f"<b>Invalid or expired bot token:</b> `{e}`")
-        except ValueError as e:
-            logger.error(f"ValueError during bot initialization: {e}")
-            return await msg.reply_text(f"<b>Failed to initialize bot client:</b> `{e}`")
-        except Exception as e:
-            logger.error(f"Bot creation error: {e}")
-            return await msg.reply_text(f"<b>BOT ERROR:</b> `{e}`")
-
-        # Get bot details
-        try:
+            _client = await start_clone_bot(self.client({'token': bot_token}, False))
             _bot = await _client.get_me()
-            logger.info(f"Bot details retrieved: {_bot.id} (@{_bot.username})")
+            details = {
+                'id': _bot.id,
+                'is_bot': True,
+                'user_id': user_id,
+                'name': _bot.first_name,
+                'token': bot_token,
+                'username': _bot.username
+            }
+            await db.add_bot(details)
+            await msg.reply_text(f"<b>Bot added successfully: @{_bot.username}</b>")
+            return True
         except Exception as e:
-            await _client.stop()
-            logger.error(f"Failed to get bot details: {e}")
-            return await msg.reply_text(f"<b>Failed to get bot details:</b> `{e}`")
-
-        # Store bot details in database
-        details = {
-            'id': _bot.id,
-            'is_bot': True,
-            'user_id': user_id,
-            'name': _bot.first_name,
-            'token': bot_token,
-            'username': _bot.username
-        }
-        await db.add_bot(details)
-        await _client.stop()
-        logger.info(f"Bot {_bot.id} added successfully for user {user_id}")
-        return True
+            await msg.reply_text(f"<b>BOT ERROR:</b> `{e}`")
+            return False
 
     async def add_session(self, bot, message):
+        """Add a userbot by accepting a session string."""
         user_id = int(message.from_user.id)
-        text = "<b>⚠️ DISCLAIMER ⚠️</b>\n\n<code>You can use your session for forwarding messages from private chats.\nPlease add your Pyrogram session at your own risk. There is a chance your account may get banned. The developer is not responsible if your account is banned.</code>"
+        text = "<b>⚠️ DISCLAIMER ⚠️</b>\n\n<code>You can use your session for forwarding messages from private chats. Please add your Pyrogram session at your own risk. There is a chance your account could be banned. The developer is not responsible if your account gets banned.</code>"
         await bot.send_message(user_id, text=text)
-        msg = await bot.ask(chat_id=user_id, text="<b>Send your Pyrogram session.\nGet it from trusted sources.\n\n/cancel - cancel the process</b>")
+        msg = await bot.ask(chat_id=user_id, text="<b>Send your Pyrogram session.\nGet it from trusted sources.\n\n/cancel - Cancel the process</b>")
+        
         if msg.text == '/cancel':
             return await msg.reply('<b>Process cancelled!</b>')
         elif len(msg.text) < SESSION_STRING_SIZE:
             return await msg.reply('<b>Invalid session string</b>')
-
+        
         try:
             client = await start_clone_bot(self.client(msg.text, True))
             user = await client.get_me()
+            details = {
+                'id': user.id,
+                'is_bot': False,
+                'user_id': user_id,
+                'name': user.first_name,
+                'session': msg.text,
+                'username': user.username
+            }
+            await db.add_bot(details)
+            await msg.reply_text(f"<b>Userbot added successfully: @{(user.username or user.id)}</b>")
+            return True
         except Exception as e:
-            logger.error(f"User bot creation error: {e}")
-            return await msg.reply_text(f"<b>USER BOT ERROR:</b> `{e}`")
-
-        details = {
-            'id': user.id,
-            'is_bot': False,
-            'user_id': user_id,
-            'name': user.first_name,
-            'session': msg.text,
-            'username': user.username
-        }
-        await db.add_bot(details)
-        await client.stop()
-        logger.info(f"Userbot {user.id} added successfully for user {user_id}")
-        return True
+            await msg.reply_text(f"<b>USERBOT ERROR:</b> `{e}`")
+            return False
 
 @Client.on_message(filters.private & filters.command('reset'))
 async def forward_tag(bot, m):
     default = await db.get_configs("01")
     temp.CONFIGS[m.from_user.id] = default
     await db.update_configs(m.from_user.id, default)
-    await m.reply("Successfully settings reset ✔️")
+    await m.reply("Successfully reset settings ✔️")
 
 @Client.on_message(filters.command('resetall') & filters.user(Config.BOT_OWNER_ID))
 async def resetall(bot, message):
     users = await db.get_all_users()
     sts = await message.reply("**Processing**")
-    TEXT = "Total: {}\nSuccess: {}\nFailed: {}\nExcept: {}"
+    TEXT = "total: {}\nsuccess: {}\nfailed: {}\nexcept: {}"
     total = success = failed = already = 0
     ERRORS = []
     async for user in users:
@@ -209,7 +188,7 @@ async def resetall(bot, message):
             ERRORS.append(e)
             failed += 1
     if ERRORS:
-        await message.reply(str(ERRORS[:100]))
+        await message.reply(ERRORS[:100])
     await sts.edit("Completed\n" + TEXT.format(total, success, failed, already))
 
 async def get_configs(user_id):
