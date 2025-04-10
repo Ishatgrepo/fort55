@@ -9,96 +9,120 @@ CLIENT = CLIENT()
 
 @Client.on_message(filters.command('settings'))
 async def settings(client, message):
-   await message.delete()
-   await message.reply_text(
-     "<b>change your settings as your wish</b>",
-     reply_markup=main_buttons()
-     )
+    await message.delete()
+    await message.reply_text(
+        "<b>change your settings as your wish</b>",
+        reply_markup=main_buttons()
+    )
     
 @Client.on_callback_query(filters.regex(r'^settings'))
 async def settings_query(bot, query):
-  user_id = query.from_user.id
-  i, type = query.data.split("#")
-  buttons = [[InlineKeyboardButton('↩ Back', callback_data="settings#main")]]
+    user_id = query.from_user.id
+    i, type = query.data.split("#")
+    buttons = [[InlineKeyboardButton('↩ Back', callback_data="settings#main")]]
   
-  if type=="main":
-     await query.message.edit_text(
-       "<b>change your settings as your wish</b>",
-       reply_markup=main_buttons())
+    if type == "main":
+        await query.message.edit_text(
+            "<b>change your settings as your wish</b>",
+            reply_markup=main_buttons())
        
-  elif type=="bots":
-     buttons = [] 
-     _bot = await db.get_bot(user_id)
-     if _bot is not None:
-        buttons.append([InlineKeyboardButton(_bot['name'],
-                         callback_data=f"settings#editbot")])
-     else:
-        buttons.append([InlineKeyboardButton('✚ Add bot ✚', 
-                         callback_data="settings#addbot")])
-        buttons.append([InlineKeyboardButton('✚ Add User bot ✚', 
-                         callback_data="settings#adduserbot")])
-     buttons.append([InlineKeyboardButton('↩ Back', 
-                      callback_data="settings#main")])
-     await query.message.edit_text(
-       "<b><u>My Bots</b></u>\n\n<b>You can manage your bots in here</b>",
-       reply_markup=InlineKeyboardMarkup(buttons))
-  
-  elif type=="addbot":
-     await query.message.delete()
-     bot = await CLIENT.add_bot(bot, query)
-     if bot != True: return
-     await query.message.reply_text(
-        "<b>bot token successfully added to db</b>",
-        reply_markup=InlineKeyboardMarkup(buttons))
-  
-  elif type=="adduserbot":
-     await query.message.delete()
-     user = await CLIENT.add_session(bot, query)
-     if user != True: return
-     await query.message.reply_text(
-        "<b>session successfully added to db</b>",
-        reply_markup=InlineKeyboardMarkup(buttons))
-      
-  elif type=="channels":
-     buttons = []
-     channels = await db.get_user_channels(user_id)
-     for channel in channels:
-        buttons.append([InlineKeyboardButton(f"{channel['title']}",
-                         callback_data=f"settings#editchannels_{channel['chat_id']}")])
-     buttons.append([InlineKeyboardButton('✚ Add Channel ✚', 
-                      callback_data="settings#addchannel")])
-     buttons.append([InlineKeyboardButton('↩ Back', 
-                      callback_data="settings#main")])
-     await query.message.edit_text( 
-       "<b><u>My Channels</b></u>\n\n<b>you can manage your target chats in here</b>",
-       reply_markup=InlineKeyboardMarkup(buttons))
-   
-  elif type=="addchannel":  
-     await query.message.delete()
-     try:
-         text = await bot.send_message(user_id, "<b>❪ SET TARGET CHAT ❫\n\nForward a message from Your target chat\n/cancel - cancel this process</b>")
-         chat_ids = await bot.listen(chat_id=user_id, timeout=300)
-         if chat_ids.text=="/cancel":
-            await chat_ids.delete()
-            return await text.edit_text(
-                  "<b>process canceled</b>",
-                  reply_markup=InlineKeyboardMarkup(buttons))
-         elif not chat_ids.forward_date:
-            await chat_ids.delete()
-            return await text.edit_text("**This is not a forward message**")
-         else:
-            chat_id = chat_ids.forward_from_chat.id
-            title = chat_ids.forward_from_chat.title
-            username = chat_ids.forward_from_chat.username
-            username = "@" + username if username else "private"
-         chat = await db.add_channel(user_id, chat_id, title, username)
-         await chat_ids.delete()
-         await text.edit_text(
-            "<b>Successfully updated</b>" if chat else "<b>This channel already added</b>",
+    elif type == "bots":
+        buttons = [] 
+        bots = await db.get_bots(user_id)
+        if bots:
+            for _bot in bots:
+                buttons.append([InlineKeyboardButton(_bot['name'],
+                                callback_data=f"settings#editbot_{_bot['id']}")])
+        buttons.append([InlineKeyboardButton('✚ Add Bot ✚', 
+                        callback_data="settings#addbot")])
+        buttons.append([InlineKeyboardButton('✚ Add User Bot ✚', 
+                        callback_data="settings#adduserbot")])
+        buttons.append([InlineKeyboardButton('↩ Back', 
+                        callback_data="settings#main")])
+        await query.message.edit_text(
+            "<b><u>My Bots</b></u>\n\n<b>You can manage your bots in here</b>",
             reply_markup=InlineKeyboardMarkup(buttons))
-     except asyncio.exceptions.TimeoutError:
-         await text.edit_text('Process has been automatically cancelled', reply_markup=InlineKeyboardMarkup(buttons))
   
+    elif type == "addbot":
+        await query.message.delete()
+        bot_added = await CLIENT.add_bot(bot, query)
+        if bot_added != True:
+            return
+        await query.message.reply_text(
+            "<b>Bot token successfully added to db</b>",
+            reply_markup=InlineKeyboardMarkup(buttons))
+  
+    elif type == "adduserbot":
+        await query.message.delete()
+        user_added = await CLIENT.add_session(bot, query)
+        if user_added != True:
+            return
+        await query.message.reply_text(
+            "<b>Session successfully added to db</b>",
+            reply_markup=InlineKeyboardMarkup(buttons))
+      
+    elif type.startswith("editbot"):
+        bot_id = type.split('_')[1]
+        bots = await db.get_bots(user_id)
+        bot = next((b for b in bots if str(b['id']) == bot_id), None)
+        if not bot:
+            await query.message.edit_text("Bot not found", reply_markup=InlineKeyboardMarkup(buttons))
+            return
+        TEXT = Translation.BOT_DETAILS if bot['is_bot'] else Translation.USER_DETAILS
+        buttons = [[InlineKeyboardButton('❌ Remove ❌', callback_data=f"settings#removebot_{bot_id}")
+                  ],
+                  [InlineKeyboardButton('↩ Back', callback_data="settings#bots")]]
+        await query.message.edit_text(
+            TEXT.format(bot['name'], bot['id'], bot['username']),
+            reply_markup=InlineKeyboardMarkup(buttons))
+                                             
+    elif type.startswith("removebot"):
+        bot_id = type.split('_')[1]
+        await db.remove_bot(user_id, bot_id)
+        await query.message.edit_text(
+            "<b>Successfully removed bot</b>",
+            reply_markup=InlineKeyboardMarkup(buttons))
+                                             
+    # Other settings remain largely unchanged, only adjusting bot-related logic
+    elif type == "channels":
+        buttons = []
+        channels = await db.get_user_channels(user_id)
+        for channel in channels:
+            buttons.append([InlineKeyboardButton(f"{channel['title']}",
+                            callback_data=f"settings#editchannels_{channel['chat_id']}")])
+        buttons.append([InlineKeyboardButton('✚ Add Channel ✚', 
+                        callback_data="settings#addchannel")])
+        buttons.append([InlineKeyboardButton('↩ Back', 
+                        callback_data="settings#main")])
+        await query.message.edit_text( 
+            "<b><u>My Channels</b></u>\n\n<b>You can manage your target chats in here</b>",
+            reply_markup=InlineKeyboardMarkup(buttons))
+   
+    elif type == "addchannel":  
+        await query.message.delete()
+        try:
+            text = await bot.send_message(user_id, "<b>❪ SET TARGET CHAT ❫\n\nForward a message from Your target chat\n/cancel - cancel this process</b>")
+            chat_ids = await bot.listen(chat_id=user_id, timeout=300)
+            if chat_ids.text == "/cancel":
+                await chat_ids.delete()
+                return await text.edit_text(
+                    "<b>process canceled</b>",
+                    reply_markup=InlineKeyboardMarkup(buttons))
+            elif not chat_ids.forward_date:
+                await chat_ids.delete()
+                return await text.edit_text("**This is not a forward message**")
+            else:
+                chat_id = chat_ids.forward_from_chat.id
+                title = chat_ids.forward_from_chat.title
+                username = chat_ids.forward_from_chat.username
+                username = "@" + username if username else "private"
+            chat = await db.add_channel(user_id, chat_id, title, username)
+            await chat_ids.delete()
+            await text.edit_text(
+                "<b>Successfully updated</b>" if chat else "<b>This channel already added</b>",
+                reply_markup=InlineKeyboardMarkup(buttons))
+        except asyncio.exceptions.TimeoutError:
+            await text.edit_text('Process has been automatically cancelled', reply_markup=InlineKeyboardMarkup(buttons))
   elif type=="editbot": 
      bot = await db.get_bot(user_id)
      TEXT = Translation.BOT_DETAILS if bot['is_bot'] else Translation.USER_DETAILS
@@ -398,28 +422,28 @@ async def settings_query(bot, query):
     await query.answer(alert, show_alert=True)
       
 def main_buttons():
-  buttons = [[
-       InlineKeyboardButton('🤖 Bᴏᴛs',
+    buttons = [[
+        InlineKeyboardButton('🤖 Bᴏᴛs',
                     callback_data=f'settings#bots'),
-       InlineKeyboardButton('🏷 Cʜᴀɴɴᴇʟs',
+        InlineKeyboardButton('🏷 Cʜᴀɴɴᴇʟs',
                     callback_data=f'settings#channels')
-       ],[
-       InlineKeyboardButton('🖋️ Cᴀᴘᴛɪᴏɴ',
+        ],[
+        InlineKeyboardButton('🖋️ Cᴀᴘᴛɪᴏɴ',
                     callback_data=f'settings#caption'),
-       InlineKeyboardButton('🗃 MᴏɴɢᴏDB',
+        InlineKeyboardButton('🗃 MᴏɴɢᴏDB',
                     callback_data=f'settings#database')
-       ],[
-       InlineKeyboardButton('🕵‍♀ Fɪʟᴛᴇʀs 🕵‍♀',
+        ],[
+        InlineKeyboardButton('🕵‍♀ Fɪʟᴛᴇʀs 🕵‍♀',
                     callback_data=f'settings#filters'),
-       InlineKeyboardButton('⏹ Bᴜᴛᴛᴏɴ',
+        InlineKeyboardButton('⏹ Bᴜᴛᴛᴏɴ',
                     callback_data=f'settings#button')
-       ],[
-       InlineKeyboardButton('Exᴛʀᴀ Sᴇᴛᴛɪɴɢs 🧪',
+        ],[
+        InlineKeyboardButton('Exᴛʀᴀ Sᴇᴛᴛɪɴɢs 🧪',
                     callback_data='settings#nextfilters')
-       ],[      
-       InlineKeyboardButton('⫷ Bᴀᴄᴋ', callback_data='back')
-       ]]
-  return InlineKeyboardMarkup(buttons)
+        ],[      
+        InlineKeyboardButton('⫷ Bᴀᴄᴋ', callback_data='back')
+        ]]
+    return InlineKeyboardMarkup(buttons)
 
 def size_limit(limit):
    if str(limit) == "None":
